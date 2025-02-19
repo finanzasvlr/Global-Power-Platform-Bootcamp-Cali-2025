@@ -1,0 +1,25 @@
+let
+    // Definir la URL del archivo CSV
+    url = "https://totoro.banrep.gov.co/analytics/saw.dll?Download&Format=csv&BypassCache=true&path=%2Fshared%2FSeries%20Estad%C3%ADsticas_T%2F1.%20IPC%20base%202018%2F1.2.%20Por%20a%C3%B1o%2F1.2.5.IPC_Serie_variaciones&lang=es&NQUser=publico&NQPassword=publico123&SyncOperation=1",
+    
+    // Añadir un User-Agent para simular una solicitud desde un navegador
+    source = Web.Contents(url, [Headers=[#"User-Agent"="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"]]),
+
+    // Leer el contenido como CSV
+    csv = Csv.Document(source, [Delimiter=",", Encoding=65001, QuoteStyle=QuoteStyle.None]),
+    #"Encabezados promovidos" = Table.PromoteHeaders(csv, [PromoteAllScalars=true]),
+    #"Tipo cambiado con configuración regional" = Table.TransformColumnTypes(#"Encabezados promovidos", {{"Indice", type number}, {"Variación anual %", type number}, {"Variación mensual %", type number}, {"Variación año corrido %", type number}}, "es-CO"),
+    #"Personalizada agregada" = Table.AddColumn(#"Tipo cambiado con configuración regional", "Fecha", each Date.EndOfMonth(
+#date(
+     Number.FromText(Text.Start([Mes Año], 4)),  // Año
+     Number.FromText(Text.End([Mes Año], 2)),    // Mes
+        1                                        // Día
+ )
+),type date),
+    #"Columnas reordenadas" = Table.ReorderColumns(#"Personalizada agregada",{"Mes Año", "Fecha", "Indice", "Variación anual %", "Variación mensual %", "Variación año corrido %"}),
+    #"Columnas quitadas" = Table.RemoveColumns(#"Columnas reordenadas",{"Mes Año"}),
+    #"Columnas con nombre cambiado" = Table.RenameColumns(#"Columnas quitadas",{{"Variación anual %", "variacion_anual"}, {"Variación mensual %", "variacion_mensual"}, {"Variación año corrido %", "variacion_ano_corrido"}, {"Fecha", "fecha"}, {"Indice", "indice"}}),
+    #"Filas filtradas" = Table.SelectRows(#"Columnas con nombre cambiado", each ([variacion_anual] <> null)),
+    #"Filas ordenadas" = Table.Sort(#"Filas filtradas",{{"fecha", Order.Ascending}})
+in
+    #"Filas ordenadas"
